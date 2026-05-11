@@ -27,9 +27,9 @@ function rotateImageBlob(blob, angleDeg, callback) {
         canvas.width = isVertical ? img.height : img.width;
         canvas.height = isVertical ? img.width : img.height;
         const ctx = canvas.getContext('2d');
-        ctx.translate(canvas.width/2, canvas.height/2);
+        ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate(rad);
-        ctx.drawImage(img, -img.width/2, -img.height/2, img.width, img.height);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2, img.width, img.height);
         canvas.toBlob(blob => callback(null, blob), 'image/jpeg', 0.9);
     };
     img.onerror = () => callback(new Error('Failed to load image'));
@@ -67,7 +67,7 @@ const rotationMap = new Map();
 
 // ==================== УТИЛИТЫ ====================
 function showLoading() { activeRequests++; loadingOverlay.style.display = 'flex'; }
-function hideLoading() { activeRequests--; if (activeRequests<=0) { activeRequests=0; loadingOverlay.style.display='none'; } }
+function hideLoading() { activeRequests--; if (activeRequests <= 0) { activeRequests = 0; loadingOverlay.style.display = 'none'; } }
 async function withLoading(promise) { showLoading(); try { return await promise; } finally { hideLoading(); } }
 function showStatus(msg, isError = false) {
     console.log(isError ? `❌ ${msg}` : `✅ ${msg}`);
@@ -147,11 +147,11 @@ async function preloadImage(filename, forceReload = false) {
     return data;
 }
 async function preloadNeighbors() {
-    const indices = [currentIndex+1, currentIndex+2, currentIndex-1, currentIndex-2];
-    const unique = [...new Set(indices)].filter(i => i>=0 && i<filesList.length && i!==currentIndex);
+    const indices = [currentIndex + 1, currentIndex + 2, currentIndex - 1, currentIndex - 2];
+    const unique = [...new Set(indices)].filter(i => i >= 0 && i < filesList.length && i !== currentIndex);
     for (let i of unique) {
         const file = filesList[i];
-        if (file && !imageCache.has(file.name)) preloadImage(file.name).catch(e=>console.warn);
+        if (file && !imageCache.has(file.name)) preloadImage(file.name).catch(e => console.warn);
     }
 }
 async function saveRotationForFile(file, rotationDeg) {
@@ -169,8 +169,9 @@ async function saveRotationForFile(file, rotationDeg) {
     return true;
 }
 
-// ==================== РЕНДЕРИНГ КАРТОЧЕК С АНИМАЦИЕЙ ====================
+// ==================== РЕНДЕРИНГ КАРТОЧЕК МГНОВЕННО (с кешем) ====================
 let currentCardElement = null;
+
 function animateTransition(newCardCallback) {
     if (isAnimating) return Promise.resolve();
     isAnimating = true;
@@ -181,7 +182,10 @@ function animateTransition(newCardCallback) {
         oldCard.style.opacity = '0';
         setTimeout(() => { if (oldCard && oldCard.parentNode) oldCard.remove(); }, 200);
     }
-    return newCardCallback().then(card => {
+    const result = newCardCallback();
+    const promise = result && result.then ? result : Promise.resolve(result);
+    return promise.then(card => {
+        if (!card) return;
         currentCardElement = card;
         card.style.transition = 'transform 0.25s cubic-bezier(0.2,0.9,0.4,1.1), opacity 0.2s';
         card.style.transform = 'translateX(0) scale(1)';
@@ -190,19 +194,22 @@ function animateTransition(newCardCallback) {
     });
 }
 
-async function renderCurrentCard() {
+function renderCurrentCardSync() {
     if (!filesList.length) {
         cardStack.innerHTML = '<div class="empty-state">📭 Нет файлов в папке photos/<br>Загрузите изображение</div>';
         currentCardElement = null;
-        return;
+        return null;
     }
     const file = filesList[currentIndex];
     const rot = rotationMap.get(file.name) || 0;
+    const cached = imageCache.get(file.name);
+    const imgSrc = cached ? cached.url : '';
+    const imgAlt = cached ? file.name : 'Загрузка...';
     const html = `
         <div class="tinder-card" data-filename="${escapeHtml(file.name)}" data-rotation="${rot}">
             <div class="card-inner">
                 <div class="card-image-wrapper">
-                    <img class="card-image" style="transform: rotate(${rot}deg);">
+                    <img class="card-image" src="${imgSrc}" alt="${imgAlt}" style="transform: rotate(${rot}deg);">
                 </div>
                 <div class="card-info">
                     <span class="file-name">${escapeHtml(file.name)}</span>
@@ -221,14 +228,23 @@ async function renderCurrentCard() {
     const temp = document.createElement('div');
     temp.innerHTML = html;
     const card = temp.firstElementChild;
-    try {
-        const cached = await preloadImage(file.name);
-        card.querySelector('.card-image').src = cached.url;
-    } catch(e) { card.querySelector('.card-image').alt = 'Ошибка'; }
     attachCardEvents(card, file);
     cardStack.innerHTML = '';
     cardStack.appendChild(card);
     currentCardElement = card;
+
+    if (!cached) {
+        preloadImage(file.name).then(cached => {
+            const img = card.querySelector('.card-image');
+            if (img && img.src !== cached.url) {
+                img.src = cached.url;
+                img.alt = file.name;
+            }
+        }).catch(e => {
+            const img = card.querySelector('.card-image');
+            if (img) img.alt = 'Ошибка';
+        });
+    }
     preloadNeighbors();
     return card;
 }
@@ -236,13 +252,13 @@ async function renderCurrentCard() {
 async function updateCardsWithAnimation(newIndex) {
     if (newIndex === currentIndex) return;
     currentIndex = newIndex;
-    await animateTransition(() => renderCurrentCard());
+    await animateTransition(() => renderCurrentCardSync());
 }
 
-async function goToPrev() { if (filesList.length) await updateCardsWithAnimation(currentIndex > 0 ? currentIndex-1 : filesList.length-1); }
-async function goToNext() { if (filesList.length) await updateCardsWithAnimation(currentIndex < filesList.length-1 ? currentIndex+1 : 0); }
+async function goToPrev() { if (filesList.length) await updateCardsWithAnimation(currentIndex > 0 ? currentIndex - 1 : filesList.length - 1); }
+async function goToNext() { if (filesList.length) await updateCardsWithAnimation(currentIndex < filesList.length - 1 ? currentIndex + 1 : 0); }
 async function goToFirst() { if (filesList.length && currentIndex !== 0) await updateCardsWithAnimation(0); }
-async function goToLast() { if (filesList.length && currentIndex !== filesList.length-1) await updateCardsWithAnimation(filesList.length-1); }
+async function goToLast() { if (filesList.length && currentIndex !== filesList.length - 1) await updateCardsWithAnimation(filesList.length - 1); }
 
 // События карточки
 function attachCardEvents(card, file) {
@@ -254,46 +270,47 @@ function attachCardEvents(card, file) {
     const wrapper = card.querySelector('.card-image-wrapper');
     const fileNameSpan = card.querySelector('.file-name');
     let currentRotation = rotationMap.get(file.name) || 0;
-    img.style.transform = `rotate(${currentRotation}deg)`;
+    if (img) img.style.transform = `rotate(${currentRotation}deg)`;
 
     function updateRotation(angle) {
-        currentRotation = ((angle % 360)+360)%360;
-        const isZoomed = wrapper.classList.contains('zoomed');
-        img.style.transform = isZoomed ? `rotate(${currentRotation}deg) scale(3)` : `rotate(${currentRotation}deg)`;
+        currentRotation = ((angle % 360) + 360) % 360;
+        const isZoomed = wrapper && wrapper.classList.contains('zoomed');
+        if (img) img.style.transform = isZoomed ? `rotate(${currentRotation}deg) scale(3)` : `rotate(${currentRotation}deg)`;
         rotationMap.set(file.name, currentRotation);
     }
-    rotateLeft.addEventListener('click', (e) => { e.stopPropagation(); updateRotation(currentRotation-90); });
-    rotateRight.addEventListener('click', (e) => { e.stopPropagation(); updateRotation(currentRotation+90); });
+    rotateLeft.addEventListener('click', (e) => { e.stopPropagation(); updateRotation(currentRotation - 90); });
+    rotateRight.addEventListener('click', (e) => { e.stopPropagation(); updateRotation(currentRotation + 90); });
     saveRot.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (currentRotation % 360 === 0) { showStatus('Не повёрнуто'); return; }
         try {
-            const nextNext = (currentIndex+1 < filesList.length) ? filesList[currentIndex+1].name : null;
-            await withLoading(saveRotationForFile(file, currentRotation));
+            const nextNext = (currentIndex + 1 < filesList.length) ? filesList[currentIndex + 1].name : null;
+            await saveRotationForFile(file, currentRotation);
             showStatus('✅ Поворот сохранён');
             await refreshAndNavigate(nextNext);
-        } catch(err) { showStatus(`❌ ${err.message}`, true); }
+        } catch (err) { showStatus(`❌ ${err.message}`, true); }
     });
     renameBtn.addEventListener('click', (e) => { e.stopPropagation(); startInlineRename(card, file); });
     fileNameSpan.addEventListener('click', (e) => { e.stopPropagation(); startInlineRename(card, file); });
     img.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (!wrapper) return;
         const isZoomed = wrapper.classList.contains('zoomed');
         if (isZoomed) {
             wrapper.classList.remove('zoomed');
-            img.style.transform = `rotate(${currentRotation}deg)`;
+            if (img) img.style.transform = `rotate(${currentRotation}deg)`;
         } else {
             wrapper.classList.add('zoomed');
             const rect = img.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width)*100;
-            const y = ((e.clientY - rect.top) / rect.height)*100;
-            img.style.transformOrigin = `${Math.min(100,Math.max(0,x))}% ${Math.min(100,Math.max(0,y))}%`;
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            img.style.transformOrigin = `${Math.min(100, Math.max(0, x))}% ${Math.min(100, Math.max(0, y))}%`;
             img.style.transform = `rotate(${currentRotation}deg) scale(3)`;
         }
     });
 }
 
-// Переименование inline
+// Переименование inline (без лоадера)
 function startInlineRename(card, file) {
     if (card.querySelector('.rename-input')) return;
     const oldName = file.name;
@@ -306,47 +323,46 @@ function startInlineRename(card, file) {
     container.insertBefore(input, nameSpan.nextSibling);
     input.focus();
     input.select();
+
     const commit = async () => {
         let newBase = input.value.trim();
         if (!newBase) { cleanup(); return; }
         let newName = ensureJpgExtension(newBase);
         if (newName === oldName) { cleanup(); return; }
         try {
-            showLoading();
             const angle = rotationMap.get(oldName) || 0;
             if (angle % 360 !== 0) await saveRotationForFile(file, angle);
-            const nextFile = (currentIndex+1 < filesList.length) ? filesList[currentIndex+1].name : null;
+            const nextFile = (currentIndex + 1 < filesList.length) ? filesList[currentIndex + 1].name : null;
             await renameFile(oldName, newName);
             showStatus(`✅ Переименован: ${oldName} → ${newName}`);
             await refreshAndNavigate(nextFile);
-        } catch(err) { showStatus(`❌ ${err.message}`, true); }
-        finally { hideLoading(); cleanup(); }
+        } catch (err) { showStatus(`❌ ${err.message}`, true); }
+        finally { cleanup(); }
     };
     const cleanup = () => { input.remove(); nameSpan.style.display = 'inline'; };
     input.addEventListener('blur', commit);
     input.addEventListener('keypress', e => { if (e.key === 'Enter') commit(); });
 }
 
-// Обновление и навигация после сохранения
+// Обновление и навигация (без лоадера)
 async function refreshAndNavigate(nextFileName) {
     await loadFilesAndRefresh();
     if (nextFileName) {
         const idx = filesList.findIndex(f => f.name === nextFileName);
         if (idx !== -1 && idx !== currentIndex) {
             currentIndex = idx;
-            await renderCurrentCard();
+            renderCurrentCardSync();
         }
     }
 }
 
-// Загрузка списка
+// Загрузка списка (без лоадера)
 async function loadFilesAndRefresh() {
     try {
-        const fetched = await withLoading(fetchFiles());
+        const fetched = await fetchFiles();
         filesList = fetched;
         if (filesList.length === 0) currentIndex = 0;
         else if (currentIndex >= filesList.length) currentIndex = 0;
-        // Очистка кеша
         for (let fn of imageCache.keys()) {
             if (!filesList.some(f => f.name === fn)) {
                 const old = imageCache.get(fn);
@@ -355,17 +371,16 @@ async function loadFilesAndRefresh() {
                 rotationMap.delete(fn);
             }
         }
-        await renderCurrentCard();
+        renderCurrentCardSync();
         showStatus(`Загружено ${filesList.length} файлов`);
-    } catch(err) {
+    } catch (err) {
         showStatus(`Ошибка загрузки: ${err.message}`, true);
         filesList = [];
-        await renderCurrentCard();
+        renderCurrentCardSync();
     }
 }
 
 // ==================== МНОЖЕСТВЕННАЯ ЗАГРУЗКА ====================
-// Загрузка из файлового инпута (multiple)
 uploadBtn.addEventListener('click', async () => {
     const files = Array.from(fileInput.files);
     if (!files.length) { showStatus('Выберите файлы', true); return; }
@@ -379,19 +394,16 @@ uploadBtn.addEventListener('click', async () => {
         await loadFilesAndRefresh();
         if (filesList.length) {
             currentIndex = filesList.length - 1;
-            await renderCurrentCard();
+            renderCurrentCardSync();
         }
-    } catch(err) {
+    } catch (err) {
         showStatus(`❌ Ошибка: ${err.message}`, true);
     } finally {
         hideLoading();
     }
 });
 
-// Загрузка фото с камеры
-uploadCameraBtn.addEventListener('click', () => {
-    cameraInput.click();
-});
+uploadCameraBtn.addEventListener('click', () => { cameraInput.click(); });
 cameraInput.addEventListener('change', async (e) => {
     if (!cameraInput.files.length) return;
     const file = cameraInput.files[0];
@@ -404,14 +416,13 @@ cameraInput.addEventListener('change', async (e) => {
         await loadFilesAndRefresh();
         if (filesList.length) {
             currentIndex = filesList.length - 1;
-            await renderCurrentCard();
+            renderCurrentCardSync();
         }
     } catch (err) {
         showStatus(`❌ Ошибка: ${err.message}`, true);
     }
 });
 
-//refreshBtn.addEventListener('click', () => loadFilesAndRefresh());
 prevBtn.addEventListener('click', goToPrev);
 nextBtn.addEventListener('click', goToNext);
 firstBtn.addEventListener('click', goToFirst);
@@ -430,4 +441,4 @@ applyTheme(saved === 'light' || saved === 'dark' ? saved : getSystemTheme());
 themeToggle.addEventListener('click', toggleTheme);
 
 loadFilesAndRefresh();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e=>console.log);
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.log);
