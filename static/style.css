@@ -1,0 +1,299 @@
+* {
+    box-sizing: border-box;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+:root {
+    --bg-body: #f5f7fa;
+    --bg-container: #ffffff;
+    --text-primary: #2c3e50;
+    --text-secondary: #4a627a;
+    --border: #dce4ec;
+    --button-bg: #2c3e50;
+    --button-hover: #1e2b38;
+    --button-secondary: #e2e6ea;
+    --button-secondary-hover: #cbd3da;
+    --card-bg: #ffffff;
+    --shadow: none;
+    --accent: #3498db;
+}
+
+body.dark {
+    --bg-body: #121212;
+    --bg-container: #1e1e2f;
+    --text-primary: #eef2f7;
+    --text-secondary: #b0bec5;
+    --border: #2c3e50;
+    --button-bg: #3b4b5e;
+    --button-hover: #4a627a;
+    --button-secondary: #2c3e50;
+    --button-secondary-hover: #405b73;
+    --card-bg: #2a2a3b;
+    --accent: #5dade2;
+}
+
+body {
+    background: var(--bg-body);
+    margin: 0;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.app {
+    max-width: 600px;
+    margin: 0 auto;
+    background: var(--bg-container);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 12px 20px;
+}
+
+/* Шапка */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+h1 {
+    font-size: 1.5rem;
+    margin: 0;
+    font-weight: 600;
+}
+.theme-btn {
+    background: none;
+    border: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 40px;
+    color: var(--text-primary);
+}
+
+/* Табы */
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.tab-btn {
+    flex: 1;
+    padding: 10px;
+    background: var(--button-secondary);
+    border: none;
+    border-radius: 40px;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+.tab-btn.active {
+    background: var(--button-bg);
+    color: white;
+}
+.panel {
+    display: none;
+    flex: 1;
+}
+.panel.active {
+    display: block;
+}
+
+/* Карточки (без теней и рамок) */
+.card-stack {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.tinder-card {
+    background: var(--card-bg);
+    border-radius: 20px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1), opacity 0.2s;
+    box-shadow: none;
+    border: none;
+}
+.card-inner {
+    display: flex;
+    flex-direction: column;
+}
+.card-image-wrapper {
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    width: 100%;
+}
+.card-image {
+    width: 100%;
+    height: auto;
+    max-height: calc(100vh - 220px);
+    object-fit: contain;
+    transition: transform 0.2s;
+}
+/* Зум (без полос) */
+.card-image-wrapper.zoomed .card-image {
+    transform: scale(3);
+    cursor: zoom-out;
+}
+.card-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+}
+.file-name {
+    font-weight: 500;
+    word-break: break-all;
+    cursor: pointer;
+    flex: 1;
+}
+.file-size {
+    opacity: 0.6;
+    font-size: 0.8rem;
+}
+.card-actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    padding: 8px 16px 16px;
+}
+.card-actions button {
+    background: var(--button-secondary);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 40px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+.rotate-group {
+    display: flex;
+    gap: 8px;
+}
+
+/* Навигационные кнопки */
+.nav-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 8px;
+    margin-bottom: 16px;
+}
+.nav-btn {
+    background: var(--button-secondary);
+    border: none;
+    padding: 10px 18px;
+    border-radius: 40px;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--text-primary);
+}
+.nav-btn:hover {
+    background: var(--button-secondary-hover);
+}
+
+/* Загрузка */
+.upload-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+input, button {
+    padding: 12px;
+    border-radius: 40px;
+    border: 1px solid var(--border);
+    font-size: 1rem;
+    background: var(--bg-container);
+    color: var(--text-primary);
+}
+button {
+    background: var(--button-bg);
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+#status {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 20px;
+    background: var(--card-bg);
+    text-align: center;
+    font-size: 0.85rem;
+}
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(3px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    z-index: 1000;
+    color: white;
+}
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+.rename-input {
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg-container);
+    color: var(--text-primary);
+        font-size: 1.5rem;
+
+}
+/* Стили для элементов загрузки */
+.upload-label {
+    font-weight: 500;
+    margin-top: 8px;
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+#fileInput, #cameraInput {
+    padding: 10px;
+    border-radius: 40px;
+    border: 1px solid var(--border);
+    background: var(--bg-container);
+    color: var(--text-primary);
+}
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}

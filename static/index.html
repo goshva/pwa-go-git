@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22><💸/text></svg>">
+
+    <title>Git File Manager | Tinder Cards</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <meta name="theme-color" content="#2c3e50" id="theme-color-meta">
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <h1>💸 Фото</h1>
+            <button id="themeToggle" class="theme-btn">🌙</button>
+        </div>
+
+        <!-- Табы -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="upload">⬆️ Загрузка</button>
+            <button class="tab-btn" data-tab="view">📷 Просмотр</button>
+        </div>
+
+        <!-- Панель просмотра (Tinder-карточки) -->
+        <div id="viewPanel" class="panel">
+            <div id="cardStack" class="card-stack"></div>
+            <div class="nav-buttons">
+                <button id="firstBtn" class="nav-btn" title="В начало">⏮</button>
+                <button id="prevBtn" class="nav-btn" title="Предыдущий">◀</button>
+                <button id="nextBtn" class="nav-btn" title="Следующий">▶</button>
+                <button id="lastBtn" class="nav-btn" title="В конец">⏭</button>
+            </div>
+        </div>
+
+        <!-- Панель загрузки -->
+        <div id="uploadPanel" class="panel active">
+            <div class="upload-section">
+                <label class="upload-label">� Выбрать файлы (можно несколько)</label>
+                <input type="file" id="fileInput" accept="image/*" multiple>
+                    <button id="uploadBtn">⬆️ Загрузить выбранные</button>
+            </div>
+            <div class="upload-section">
+                <label class="upload-label">📸 Сфотографировать</label>
+                <input type="file" id="cameraInput" accept="image/*" capture="environment">
+                                    <button id="uploadCameraBtn">📸 Загрузить с камеры</button>
+
+                <input type="text" id="commitMsg" placeholder="Commit message (опционально)">
+                <div class="button-group">
+                </div>
+            </div>
+        </div>
+
+        <!-- Статус и лоадер -->
+        <div id="status"></div>
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <div>Загрузка...</div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
