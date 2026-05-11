@@ -1,6 +1,6 @@
 {
-  "name": "Git File Manager",
-  "short_name": "GitFM",
+  "name": "КазнаЧей?",
+  "short_name": "TrackMoney",
   "start_url": ".",
   "display": "standalone",
   "theme_color": "#2c3e50",
@@ -9,7 +9,7 @@
     {
       "src": "icon.svg",
       "sizes": "any",
-      "type": "image/png"
+      "type": "image/svg+xml"
     },
     {
       "src": "icon-512.png",

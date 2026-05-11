@@ -442,3 +442,61 @@ themeToggle.addEventListener('click', toggleTheme);
 
 loadFilesAndRefresh();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.log);
+// ==================== АВТООБНОВЛЕНИЕ PWA ====================
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+        console.log('SW registered:', reg);
+        // Отслеживаем новые версии
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            console.log('New SW found, state:', newWorker.state);
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // Новая версия готова, но не активирована, предлагаем обновить страницу
+                    showUpdateNotification();
+                }
+            });
+        });
+    }).catch(err => console.log('SW registration failed:', err));
+
+    // Обрабатываем сообщения от SW (например, после активации)
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'SW_UPDATED') {
+            console.log('Received SW_UPDATED message');
+            showUpdateNotification();
+        }
+    });
+}
+
+function showUpdateNotification() {
+    // Создаём уведомление поверх интерфейса
+    const notification = document.createElement('div');
+    notification.textContent = '🔄 Доступна новая версия приложения. Обновить?';
+    notification.style.position = 'fixed';
+    notification.style.bottom = '20px';
+    notification.style.left = '20px';
+    notification.style.right = '20px';
+    notification.style.backgroundColor = 'var(--button-bg)';
+    notification.style.color = 'white';
+    notification.style.padding = '12px 20px';
+    notification.style.borderRadius = '40px';
+    notification.style.display = 'flex';
+    notification.style.justifyContent = 'space-between';
+    notification.style.alignItems = 'center';
+    notification.style.zIndex = '10001';
+    notification.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+    notification.style.gap = '12px';
+    notification.style.flexWrap = 'wrap';
+    notification.innerHTML = `
+        <span>🔄 Новая версия приложения</span>
+        <button id="updateBtn" style="background: white; color: black; border: none; padding: 6px 16px; border-radius: 40px; cursor: pointer;">Обновить</button>
+    `;
+    document.body.appendChild(notification);
+    document.getElementById('updateBtn').addEventListener('click', () => {
+        window.location.reload();
+    });
+    // Автоматически скрыть через 30 секунд, если пользователь не нажал
+    setTimeout(() => {
+        if (notification.parentNode) notification.remove();
+    }, 30000);
+}
