@@ -382,8 +382,8 @@ async function loadFilesAndRefresh() {
 
 // ==================== ЗАГРУЗКА С КАМЕРЫ (СТАБИЛЬНАЯ) ====================
 // Гарантированное открытие камеры через создание свежего input
+// Загрузка с камеры (стабильная + сжатие)
 function triggerCameraUpload() {
-    // Удаляем старый input, если он был
     const oldInput = document.getElementById('_cameraInputDynamic');
     if (oldInput) oldInput.remove();
 
@@ -395,41 +395,38 @@ function triggerCameraUpload() {
     input.style.display = 'none';
     document.body.appendChild(input);
 
-    // Обработчик выбора файла
     input.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Блокируем кнопку на время загрузки
         uploadCameraBtn.disabled = true;
-        uploadCameraBtn.textContent = '⏳ Загрузка...';
-        showStatus('Отправка фото на сервер...');
+        uploadCameraBtn.textContent = '⏳ Сжатие...';
+        showStatus('Сжатие фото...');
 
         try {
-            await uploadFile(file, '');
+            // Автоматическое сжатие до 300 КБ
+            const compressed = await compressToMaxSize(file, 300);
+            showStatus('Отправка на сервер...');
+            await uploadFile(compressed, '');
             showStatus('✅ Фото успешно загружено!');
-            // Обновляем список файлов и переходим в просмотр
+
             await loadFilesAndRefresh();
             if (filesList.length) {
-                currentIndex = filesList.length - 1;  // последний загруженный
+                currentIndex = filesList.length - 1;
                 renderCurrentCardSync();
-                // Активируем вкладку просмотра
                 document.querySelector('.tab-btn[data-tab="view"]').click();
             }
         } catch (err) {
             showStatus(`❌ Ошибка загрузки: ${err.message}`, true);
         } finally {
-            // Восстанавливаем кнопку и удаляем временный input
             uploadCameraBtn.disabled = false;
             uploadCameraBtn.textContent = '📸 Сфотографировать и загрузить';
             input.remove();
         }
     });
 
-    // Открываем камеру
     input.click();
 }
-
 // Назначаем обработчик на кнопку
 uploadCameraBtn.addEventListener('click', triggerCameraUpload);
 
@@ -459,7 +456,49 @@ prevBtn.addEventListener('click', goToPrev);
 nextBtn.addEventListener('click', goToNext);
 firstBtn.addEventListener('click', goToFirst);
 lastBtn.addEventListener('click', goToLast);
+//
+// Сжатие JPEG/PNG до целевого размера с минимальной потерей качества
+async function compressToMaxSize(file, maxSizeKB = 300) {
+  // Если файл уже маленький, возвращаем как есть
+  if (file.size <= maxSizeKB * 1024) return file;
 
+  // Создаём изображение из blob
+  const img = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+
+  // Рисуем на canvas для пережатия
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  // Подбираем качество от 0.9 до 0.3 с шагом 0.1, затем уточняем
+  let quality = 0.9;
+  let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+  
+  // Быстрое снижение качества, если нужно
+  while (blob.size > maxSizeKB * 1024 && quality > 0.3) {
+    quality -= 0.1;
+    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+  }
+  
+  // Если всё ещё велик, уменьшаем разрешение на 20%
+  if (blob.size > maxSizeKB * 1024) {
+    const scale = Math.sqrt((maxSizeKB * 1024) / blob.size) * 0.9;
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+  }
+
+  URL.revokeObjectURL(img.src);
+  return new File([blob], file.name.replace(/\.(png|gif|bmp|webp)$/i, '.jpg'), { type: 'image/jpeg' });
+}
 // Тема
 function getSystemTheme() { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
 function applyTheme(theme) {
