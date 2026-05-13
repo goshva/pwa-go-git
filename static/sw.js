@@ -1,4 +1,4 @@
-const CACHE_NAME = 'git-file-cache-v4'; // увеличили версию
+const CACHE_NAME = 'git-file-cache-v5'; // увеличили версию
 const STATIC_ASSETS = [
     '/',
     '/index.html',

@@ -44,7 +44,7 @@ let isAnimating = false;
 
 // DOM
 const fileInput = document.getElementById('fileInput');
-const cameraInput = document.getElementById('cameraInput');
+const cameraInput = document.getElementById('cameraInput');  // скрытый input
 const commitMsgInput = document.getElementById('commitMsg');
 const uploadBtn = document.getElementById('uploadBtn');
 const uploadCameraBtn = document.getElementById('uploadCameraBtn');
@@ -78,6 +78,7 @@ function showStatus(msg, isError = false) {
         statusDiv.style.background = 'var(--card-bg)';
     }, 3000);
 }
+
 // Табы
 tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -169,7 +170,7 @@ async function saveRotationForFile(file, rotationDeg) {
     return true;
 }
 
-// ==================== РЕНДЕРИНГ КАРТОЧЕК МГНОВЕННО (с кешем) ====================
+// ==================== РЕНДЕРИНГ КАРТОЧЕК ====================
 let currentCardElement = null;
 
 function animateTransition(newCardCallback) {
@@ -310,7 +311,7 @@ function attachCardEvents(card, file) {
     });
 }
 
-// Переименование inline (без лоадера)
+// Переименование inline
 function startInlineRename(card, file) {
     if (card.querySelector('.rename-input')) return;
     const oldName = file.name;
@@ -344,7 +345,7 @@ function startInlineRename(card, file) {
     input.addEventListener('keypress', e => { if (e.key === 'Enter') commit(); });
 }
 
-// Обновление и навигация (без лоадера)
+// Обновление и навигация
 async function refreshAndNavigate(nextFileName) {
     await loadFilesAndRefresh();
     if (nextFileName) {
@@ -356,7 +357,6 @@ async function refreshAndNavigate(nextFileName) {
     }
 }
 
-// Загрузка списка (без лоадера)
 async function loadFilesAndRefresh() {
     try {
         const fetched = await fetchFiles();
@@ -380,17 +380,68 @@ async function loadFilesAndRefresh() {
     }
 }
 
-// ==================== МНОЖЕСТВЕННАЯ ЗАГРУЗКА ====================
+// ==================== ЗАГРУЗКА С КАМЕРЫ (СТАБИЛЬНАЯ) ====================
+// Гарантированное открытие камеры через создание свежего input
+function triggerCameraUpload() {
+    // Удаляем старый input, если он был
+    const oldInput = document.getElementById('_cameraInputDynamic');
+    if (oldInput) oldInput.remove();
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.id = '_cameraInputDynamic';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    // Обработчик выбора файла
+    input.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Блокируем кнопку на время загрузки
+        uploadCameraBtn.disabled = true;
+        uploadCameraBtn.textContent = '⏳ Загрузка...';
+        showStatus('Отправка фото на сервер...');
+
+        try {
+            await uploadFile(file, '');
+            showStatus('✅ Фото успешно загружено!');
+            // Обновляем список файлов и переходим в просмотр
+            await loadFilesAndRefresh();
+            if (filesList.length) {
+                currentIndex = filesList.length - 1;  // последний загруженный
+                renderCurrentCardSync();
+                // Активируем вкладку просмотра
+                document.querySelector('.tab-btn[data-tab="view"]').click();
+            }
+        } catch (err) {
+            showStatus(`❌ Ошибка загрузки: ${err.message}`, true);
+        } finally {
+            // Восстанавливаем кнопку и удаляем временный input
+            uploadCameraBtn.disabled = false;
+            uploadCameraBtn.textContent = '📸 Сфотографировать и загрузить';
+            input.remove();
+        }
+    });
+
+    // Открываем камеру
+    input.click();
+}
+
+// Назначаем обработчик на кнопку
+uploadCameraBtn.addEventListener('click', triggerCameraUpload);
+
+// ==================== МНОЖЕСТВЕННАЯ ЗАГРУЗКА (как раньше) ====================
 uploadBtn.addEventListener('click', async () => {
     const files = Array.from(fileInput.files);
     if (!files.length) { showStatus('Выберите файлы', true); return; }
-    const commitMsg = commitMsgInput.value;
     try {
         showLoading();
-        const { successCount, failCount } = await uploadMultipleFiles(files, commitMsg);
+        const { successCount, failCount } = await uploadMultipleFiles(files, '');
         showStatus(`✅ Загружено ${successCount} из ${files.length} файлов${failCount ? `, ошибок: ${failCount}` : ''}`);
         fileInput.value = '';
-        commitMsgInput.value = '';
         await loadFilesAndRefresh();
         if (filesList.length) {
             currentIndex = filesList.length - 1;
@@ -403,26 +454,7 @@ uploadBtn.addEventListener('click', async () => {
     }
 });
 
-uploadCameraBtn.addEventListener('click', () => { cameraInput.click(); });
-cameraInput.addEventListener('change', async (e) => {
-    if (!cameraInput.files.length) return;
-    const file = cameraInput.files[0];
-    const commitMsg = commitMsgInput.value;
-    try {
-        await withLoading(uploadFile(file, commitMsg));
-        showStatus(`✅ Фото с камеры "${file.name}" загружено`);
-        cameraInput.value = '';
-        commitMsgInput.value = '';
-        await loadFilesAndRefresh();
-        if (filesList.length) {
-            currentIndex = filesList.length - 1;
-            renderCurrentCardSync();
-        }
-    } catch (err) {
-        showStatus(`❌ Ошибка: ${err.message}`, true);
-    }
-});
-
+// Навигация
 prevBtn.addEventListener('click', goToPrev);
 nextBtn.addEventListener('click', goToNext);
 firstBtn.addEventListener('click', goToFirst);
@@ -440,26 +472,24 @@ const saved = localStorage.getItem('theme');
 applyTheme(saved === 'light' || saved === 'dark' ? saved : getSystemTheme());
 themeToggle.addEventListener('click', toggleTheme);
 
+// Инициализация
 loadFilesAndRefresh();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.log);
+
 // ==================== АВТООБНОВЛЕНИЕ PWA ====================
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(reg => {
         console.log('SW registered:', reg);
-        // Отслеживаем новые версии
         reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             console.log('New SW found, state:', newWorker.state);
             newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // Новая версия готова, но не активирована, предлагаем обновить страницу
                     showUpdateNotification();
                 }
             });
         });
     }).catch(err => console.log('SW registration failed:', err));
 
-    // Обрабатываем сообщения от SW (например, после активации)
     navigator.serviceWorker.addEventListener('message', event => {
         if (event.data && event.data.type === 'SW_UPDATED') {
             console.log('Received SW_UPDATED message');
@@ -469,14 +499,12 @@ if ('serviceWorker' in navigator) {
 }
 
 function showUpdateNotification() {
-    // Создаём уведомление поверх интерфейса
     const notification = document.createElement('div');
-    notification.textContent = '🔄 Доступна новая версия приложения. Обновить?';
     notification.style.position = 'fixed';
     notification.style.bottom = '20px';
     notification.style.left = '20px';
     notification.style.right = '20px';
-    notification.style.backgroundColor = 'var(--button-bg)';
+    notification.style.backgroundColor = '#4CAF50';
     notification.style.color = 'white';
     notification.style.padding = '12px 20px';
     notification.style.borderRadius = '40px';
@@ -495,7 +523,6 @@ function showUpdateNotification() {
     document.getElementById('updateBtn').addEventListener('click', () => {
         window.location.reload();
     });
-    // Автоматически скрыть через 30 секунд, если пользователь не нажал
     setTimeout(() => {
         if (notification.parentNode) notification.remove();
     }, 30000);

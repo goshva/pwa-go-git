@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💸</text></svg>">
+
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💸</text></svg>">
 
     <title>Git File Manager | Tinder Cards</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     <meta name="theme-color" content="#2c3e50" id="theme-color-meta">
 </head>
+
 <body>
     <div class="app">
         <div class="header">
@@ -40,13 +43,13 @@
             <div class="upload-section">
                 <label class="upload-label">📁 Выбрать файлы (можно несколько)</label>
                 <input type="file" id="fileInput" accept="image/*" multiple>
-                    <button id="uploadBtn">⬆️ Загрузить выбранные</button>
+                <button id="uploadBtn">⬆️ Загрузить выбранные</button>
             </div>
             <hr>
             <div class="upload-section">
                 <label class="upload-label">📸 Сфотографировать</label>
                 <input type="file" id="cameraInput" accept="image/*" capture="environment">
-                                    <button id="uploadCameraBtn">📸 Загрузить с камеры</button>
+                <button id="uploadCameraBtn" class="camera-btn">📸 Сфотографировать и загрузить</button>
 
                 <!--<input type="text" id="commitMsg" placeholder="Commit message (опционально)"> -->
                 <div class="button-group">
@@ -63,4 +66,5 @@
     </div>
     <script src="app.js"></script>
 </body>
+
 </html>
