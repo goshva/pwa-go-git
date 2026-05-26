@@ -3,12 +3,7 @@ meta:
   toolchain:
     name: go
     version: 1.22
-build:
-  commands:
-    - go mod download
-    - go build -o money-track main.go
 run:
-  command: ./money-track
   containerPort: 8080
   env:
     - name: GHTOKEN
