@@ -1,8 +1,8 @@
 meta:
-  environment: golang
-  toolchain:
-    name: go
-    version: 1.22
+  environment: docker
+  toolchain: default
+build:
+  image: Dockerfile
 run:
   containerPort: 8080
   env:
