@@ -1,0 +1,17 @@
+name: MoneyTrack
+tariffId: "4"
+meta:
+  toolchain: go
+build:
+  commands:
+    - go mod download
+    - go build -o money-track main.go
+run:
+  command: ./money-track
+  ports:
+    - 8080
+  env:
+    - name: GHTOKEN
+      value: ${{ secrets.GHTOKEN }}
+    - name: PORT
+      value: "8080"
