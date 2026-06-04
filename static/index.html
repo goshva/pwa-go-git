@@ -8,62 +8,67 @@
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💸</text></svg>">
 
-    <title>Git File Manager | Tinder Cards</title>
+    <title>Фото банкнот</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-    <meta name="theme-color" content="#2c3e50" id="theme-color-meta">
+    <meta name="theme-color" content="#1a5f4a" id="theme-color-meta">
 </head>
 
 <body>
     <div class="app">
-        <div class="header">
-            <h1>💸Фото банкнот</h1>
-            <button id="themeToggle" class="theme-btn">🌙</button>
+        <header class="header">
+            <div class="header-text">
+                <p class="header-kicker">Git · photos/</p>
+                <h1>💸 Фото банкнот</h1>
+            </div>
+            <button id="themeToggle" class="theme-btn" type="button" aria-label="Сменить тему">🌙</button>
+        </header>
+
+        <div class="tabs" role="tablist">
+            <button class="tab-btn active" type="button" data-tab="upload" role="tab" aria-selected="true">⬆️ Загрузка</button>
+            <button class="tab-btn" type="button" data-tab="view" role="tab" aria-selected="false">📷 Просмотр</button>
         </div>
 
-        <!-- Табы -->
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="upload">⬆️ Загрузка</button>
-            <button class="tab-btn" data-tab="view">📷 Просмотр</button>
-        </div>
-
-        <!-- Панель просмотра (Tinder-карточки) -->
-        <div id="viewPanel" class="panel">
+        <div id="viewPanel" class="panel" role="tabpanel">
+            <div class="view-toolbar">
+                <span id="positionBadge" class="position-badge" aria-live="polite">—</span>
+                <button id="refreshBtn" type="button" class="ghost-btn" title="Обновить список">🔄</button>
+            </div>
             <div id="cardStack" class="card-stack"></div>
             <div class="nav-buttons">
-                <button id="firstBtn" class="nav-btn" title="В начало">⏮</button>
-                <button id="prevBtn" class="nav-btn" title="Предыдущий">◀</button>
-                <button id="nextBtn" class="nav-btn" title="Следующий">▶</button>
-                <button id="lastBtn" class="nav-btn" title="В конец">⏭</button>
+                <button id="firstBtn" class="nav-btn" type="button" title="В начало" aria-label="В начало">⏮</button>
+                <button id="prevBtn" class="nav-btn" type="button" title="Предыдущий" aria-label="Предыдущий">◀</button>
+                <button id="nextBtn" class="nav-btn nav-btn-primary" type="button" title="Следующий" aria-label="Следующий">▶</button>
+                <button id="lastBtn" class="nav-btn" type="button" title="В конец" aria-label="В конец">⏭</button>
             </div>
         </div>
 
-        <!-- Панель загрузки -->
-        <div id="uploadPanel" class="panel active">
-            <div class="upload-section">
-                <label class="upload-label">📁 Выбрать файлы (можно несколько)</label>
+        <div id="uploadPanel" class="panel active" role="tabpanel">
+            <div class="upload-card">
+                <label class="upload-label" for="fileInput">📁 Выбрать файлы</label>
                 <input type="file" id="fileInput" accept="image/*" multiple>
-                <button id="uploadBtn">⬆️ Загрузить выбранные</button>
+                <button id="uploadBtn" type="button" class="action-btn">⬆️ Загрузить выбранные</button>
             </div>
-            <hr>
-            <div class="upload-section">
-                <label class="upload-label">📸 Сфотографировать</label>
-                <input type="file" id="cameraInput" accept="image/*" capture="environment">
-                <button id="uploadCameraBtn" class="camera-btn">📸 Сфотографировать и загрузить</button>
 
-                <!--<input type="text" id="commitMsg" placeholder="Commit message (опционально)"> -->
-                <div class="button-group">
-                </div>
+            <div class="upload-card upload-card-camera">
+                <label class="upload-label">📸 С камеры</label>
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+                <button id="uploadCameraBtn" type="button" class="action-btn camera-btn">📸 Сфотографировать</button>
+                <button id="nextPhotoBtn" type="button" class="action-btn secondary-btn" hidden>📸 Следующее фото</button>
+                <p id="uploadHint" class="upload-hint">После съёмки можно сразу сделать ещё одно фото — без перехода в просмотр.</p>
             </div>
         </div>
 
-        <!-- Статус и лоадер -->
-        <div id="status"></div>
-        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-            <div class="spinner"></div>
-            <div>Загрузка...</div>
+        <div id="status" class="status-bar" role="status" aria-live="polite">Готово</div>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;" aria-hidden="true">
+        <div class="loading-card">
+            <div class="spinner" aria-hidden="true"></div>
+            <p id="loadingText">Загрузка...</p>
         </div>
     </div>
+
     <script src="app.js"></script>
 </body>
 

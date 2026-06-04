@@ -14,6 +14,26 @@ import (
 	"github.com/joho/godotenv"
 )
 
+func sanitizeFilename(name string) string {
+	name = strings.ReplaceAll(name, "\x00", "")
+	name = strings.TrimSpace(name)
+	return name
+}
+
+func decodeGitHubContent(b64 string) ([]byte, error) {
+	b64 = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, b64)
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.ReplaceAll(decoded, []byte{0}, nil), nil
+}
+
 type GitHubContent struct {
 	Name        string `json:"name"`
 	Path        string `json:"path"`
@@ -106,7 +126,7 @@ func listFiles(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/file/{filename} – скачать файл (возвращает содержимое)
 func downloadFile(w http.ResponseWriter, r *http.Request) {
-	filename := strings.TrimPrefix(r.URL.Path, "/api/file/")
+	filename := sanitizeFilename(strings.TrimPrefix(r.URL.Path, "/api/file/"))
 	if filename == "" {
 		http.Error(w, "filename required", http.StatusBadRequest)
 		return
@@ -183,18 +203,24 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
+    fileBytes = bytes.ReplaceAll(fileBytes, []byte{0}, nil)
+    filename := sanitizeFilename(handler.Filename)
+    if filename == "" {
+        http.Error(w, "invalid filename", http.StatusBadRequest)
+        return
+    }
     contentBase64 := base64.StdEncoding.EncodeToString(fileBytes)
 
     commitMsg := r.FormValue("message")
     if commitMsg == "" {
-        commitMsg = "Upload " + handler.Filename
+        commitMsg = "Upload " + filename
     }
 
-    remotePath := targetDir + "/" + handler.Filename
+    remotePath := targetDir + "/" + filename
     url := "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/contents/" + remotePath
 
     // Получаем SHA, если файл уже существует
-    sha, err := getFileSHA(handler.Filename)
+    sha, err := getFileSHA(filename)
     if err != nil {
         http.Error(w, "failed to check file existence: "+err.Error(), http.StatusInternalServerError)
         return
@@ -207,7 +233,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
     if sha != "" {
         payload["sha"] = sha
         // можно изменить сообщение коммита, чтобы было понятно, что это обновление
-        payload["message"] = "Update " + handler.Filename
+        payload["message"] = "Update " + filename
     }
 
     jsonPayload, _ := json.Marshal(payload)
@@ -233,7 +259,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
     }
 
     w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{"status": "ok", "filename": handler.Filename})
+    json.NewEncoder(w).Encode(map[string]string{"status": "ok", "filename": filename})
 }
 
 // PUT /api/rename – переименовать файл (получить содержимое, удалить старый, создать новый)
@@ -244,6 +270,8 @@ func renameFile(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "invalid request", http.StatusBadRequest)
         return
     }
+    req.OldName = sanitizeFilename(req.OldName)
+    req.NewName = sanitizeFilename(req.NewName)
     if req.OldName == "" || req.NewName == "" {
         http.Error(w, "old_name and new_name are required", http.StatusBadRequest)
         return
@@ -275,7 +303,7 @@ func renameFile(w http.ResponseWriter, r *http.Request) {
         Content string `json:"content"`
     }
     json.NewDecoder(getResp.Body).Decode(&fileInfo)
-    contentBytes, err := base64.StdEncoding.DecodeString(fileInfo.Content)
+    contentBytes, err := decodeGitHubContent(fileInfo.Content)
     if err != nil {
         http.Error(w, "failed to decode content", http.StatusInternalServerError)
         return

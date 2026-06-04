@@ -3,7 +3,7 @@
   "short_name": "TrackMoney",
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#2c3e50",
+  "theme_color": "#1a5f4a",
   "background_color": "#ffffff",
   "icons": [
     {
