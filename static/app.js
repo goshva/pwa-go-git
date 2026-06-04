@@ -272,7 +272,6 @@ function renderCurrentCardSync() {
                     <img class="card-image" src="${imgSrc}" alt="${imgAlt}" style="transform: rotate(${rot}deg);">
                 </div>
                 <div class="card-info">
-                    <span class="file-position">${escapeHtml(positionLabel)}</span>
                     <span class="file-name">${escapeHtml(file.name)}</span>
                 </div>
                 <div class="card-actions">
@@ -406,8 +405,10 @@ function startInlineRename(card, file) {
             showStatus(`✅ Переименован: ${oldName} → ${newName}`);
             await refreshInPlace(newName);
         } catch (err) { showStatus(`❌ ${err.message}`, true); }
-        finally { hideLoading(); }
-        finally { cleanup(); }
+        finally {
+            hideLoading();
+            cleanup();
+        }
     };
     const cleanup = () => { input.remove(); nameSpan.style.display = 'inline'; };
     input.addEventListener('blur', commit);
