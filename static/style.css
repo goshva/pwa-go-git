@@ -145,6 +145,51 @@ h1 {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
+    gap: 10px;
+}
+
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sync-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--button-bg);
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 700;
+    transition: opacity 0.2s, transform 0.15s;
+}
+
+.sync-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.sync-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: #fff;
+    color: var(--button-bg);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.sync-badge.visible {
+    display: inline-flex;
 }
 
 .position-badge {

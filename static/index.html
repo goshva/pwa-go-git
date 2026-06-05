@@ -18,7 +18,7 @@
     <div class="app">
         <header class="header">
             <div class="header-text">
-                <p class="header-kicker">Git · photos/</p>
+                <p class="header-kicker">Локально · photos/</p>
                 <h1>💸 Фото банкнот</h1>
             </div>
             <button id="themeToggle" class="theme-btn" type="button" aria-label="Сменить тему">🌙</button>
@@ -32,7 +32,10 @@
         <div id="viewPanel" class="panel" role="tabpanel">
             <div class="view-toolbar">
                 <span id="positionBadge" class="position-badge" aria-live="polite">—</span>
-                <button id="refreshBtn" type="button" class="ghost-btn" title="Обновить список">🔄</button>
+                <div class="toolbar-actions">
+                    <button id="syncBtn" type="button" class="sync-btn" title="Синхронизировать с Git">☁️ Git <span id="syncBadge" class="sync-badge" hidden>0</span></button>
+                    <button id="refreshBtn" type="button" class="ghost-btn" title="Обновить список">🔄</button>
+                </div>
             </div>
             <div id="cardStack" class="card-stack"></div>
             <div class="nav-buttons">
@@ -53,9 +56,7 @@
             <div class="upload-card upload-card-camera">
                 <label class="upload-label">📸 С камеры</label>
                 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-                <button id="uploadCameraBtn" type="button" class="action-btn camera-btn">📸 Сфотографировать</button>
-                <button id="nextPhotoBtn" type="button" class="action-btn secondary-btn" hidden>📸 Следующее фото</button>
-                <p id="uploadHint" class="upload-hint">После съёмки можно сразу сделать ещё одно фото — без перехода в просмотр.</p>
+                <button id="uploadCameraBtn" type="button" class="action-btn camera-btn">📸 Сфотографировать и загрузить</button>
             </div>
         </div>
 

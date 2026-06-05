@@ -1,4 +1,4 @@
-const CACHE_NAME = 'git-file-cache-v7'; // увеличили версию
+const CACHE_NAME = 'git-file-cache-v10';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -31,11 +31,22 @@ self.addEventListener('activate', event => {
     });
 });
 
+const isCacheableRequest = (request) => {
+    if (request.method !== 'GET') return false;
+    const url = new URL(request.url);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    if (url.origin !== self.location.origin) return false;
+    if (url.pathname.startsWith('/api/')) return false;
+    return true;
+};
+
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
     if (url.pathname.startsWith('/api/')) {
-        // API всегда из сети
-        event.respondWith(fetch(event.request).catch(err => {
+        event.respondWith(fetch(event.request).catch(() => {
             return new Response(JSON.stringify({ error: 'Network error' }), {
                 status: 503,
                 headers: { 'Content-Type': 'application/json' }
@@ -43,14 +54,18 @@ self.addEventListener('fetch', event => {
         }));
         return;
     }
-    // Статика: cache-first
+
+    if (!isCacheableRequest(event.request)) return;
+
     event.respondWith(
         caches.match(event.request).then(cached => {
             if (cached) return cached;
             return fetch(event.request).then(response => {
-                if (response && response.status === 200) {
+                if (response && response.status === 200 && response.type === 'basic') {
                     const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    caches.open(CACHE_NAME)
+                        .then(cache => cache.put(event.request, clone))
+                        .catch(() => {});
                 }
                 return response;
             });

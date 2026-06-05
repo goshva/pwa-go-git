@@ -19,16 +19,21 @@ function sanitizeFilename(name) {
     if (!name) return '';
     return String(name).replace(/\0/g, '').trim();
 }
-async function blobWithoutNullBytes(blob) {
-    const buf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let hasNull = false;
-    for (let i = 0; i < bytes.length; i++) {
-        if (bytes[i] === 0) { hasNull = true; break; }
-    }
-    if (!hasNull) return blob;
-    const clean = new Uint8Array(bytes.filter(b => b !== 0));
-    return new Blob([clean], { type: blob.type || 'image/jpeg' });
+function invalidateImageCache(filename) {
+    if (!filename || !imageCache.has(filename)) return;
+    const old = imageCache.get(filename);
+    if (old.url) URL.revokeObjectURL(old.url);
+    imageCache.delete(filename);
+}
+function indexOfFile(name) {
+    return filesList.findIndex(f => f.name === name);
+}
+function showFileByName(name) {
+    const idx = indexOfFile(name);
+    if (idx === -1) return false;
+    currentIndex = idx;
+    renderCurrentCardSync();
+    return true;
 }
 function rotateImageBlob(blob, angleDeg, callback) {
     console.log(`Rotating by ${angleDeg}°`);
@@ -68,7 +73,8 @@ const uploadBtn = document.getElementById('uploadBtn');
 const uploadCameraBtn = document.getElementById('uploadCameraBtn');
 const refreshBtn = document.getElementById('refreshBtn');
 const positionBadge = document.getElementById('positionBadge');
-const nextPhotoBtn = document.getElementById('nextPhotoBtn');
+const syncBtn = document.getElementById('syncBtn');
+const syncBadge = document.getElementById('syncBadge');
 const loadingText = document.getElementById('loadingText');
 const statusDiv = document.getElementById('status');
 const cardStack = document.getElementById('cardStack');
@@ -85,6 +91,9 @@ const tabBtns = document.querySelectorAll('.tab-btn');
 // Кеш
 const imageCache = new Map();
 const rotationMap = new Map();
+const preloadPromises = new Map();
+let isCameraUploading = false;
+let isBatchUploading = false;
 
 // ==================== УТИЛИТЫ ====================
 function setLoadingText(text) {
@@ -97,13 +106,18 @@ function showLoading(text) {
     loadingOverlay.setAttribute('aria-hidden', 'false');
 }
 function hideLoading() {
-    activeRequests--;
-    if (activeRequests <= 0) {
-        activeRequests = 0;
+    activeRequests = Math.max(0, activeRequests - 1);
+    if (activeRequests === 0) {
         loadingOverlay.style.display = 'none';
         loadingOverlay.setAttribute('aria-hidden', 'true');
         setLoadingText('Загрузка...');
     }
+}
+function resetLoading() {
+    activeRequests = 0;
+    loadingOverlay.style.display = 'none';
+    loadingOverlay.setAttribute('aria-hidden', 'true');
+    setLoadingText('Загрузка...');
 }
 async function withLoading(promise, text) {
     showLoading(text);
@@ -130,6 +144,37 @@ function formatPositionLabel(index) {
     if (!filesList.length) return '';
     return `№ ${index + 1} из ${filesList.length}`;
 }
+function switchToViewTab() {
+    const viewTab = document.querySelector('.tab-btn[data-tab="view"]');
+    if (viewTab) viewTab.click();
+}
+async function fetchSyncStatus() {
+    const res = await fetch(`${API_BASE}/sync/status`);
+    if (!res.ok) return { pending: 0, has_token: false };
+    const data = await res.json();
+    return data && typeof data === 'object' ? data : { pending: 0, has_token: false };
+}
+async function syncToGit() {
+    const res = await fetch(`${API_BASE}/sync`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+}
+async function updateSyncBadge() {
+    if (!syncBadge) return;
+    try {
+        const { pending } = await fetchSyncStatus();
+        if (pending > 0) {
+            syncBadge.textContent = pending;
+            syncBadge.hidden = false;
+            syncBadge.classList.add('visible');
+        } else {
+            syncBadge.hidden = true;
+            syncBadge.classList.remove('visible');
+        }
+    } catch {
+        syncBadge.hidden = true;
+    }
+}
 
 // Табы
 tabBtns.forEach(btn => {
@@ -148,15 +193,14 @@ async function fetchFiles() {
     const res = await fetch(`${API_BASE}/files`);
     if (!res.ok) throw new Error('Не удалось получить список');
     const data = await res.json();
-    console.log(`Received ${data.length} files`);
-    return data;
+    const files = Array.isArray(data) ? data : [];
+    console.log(`Received ${files.length} files`);
+    return files;
 }
 async function uploadFile(file, commitMsg) {
     const safeName = sanitizeFilename(file.name);
-    const cleanBlob = await blobWithoutNullBytes(file);
-    const safeFile = new File([cleanBlob], safeName, { type: file.type || 'image/jpeg' });
     const fd = new FormData();
-    fd.append('file', safeFile);
+    fd.append('file', file, safeName);
     if (commitMsg) fd.append('message', commitMsg);
     const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
     if (!res.ok) throw new Error(await res.text());
@@ -165,10 +209,13 @@ async function uploadFile(file, commitMsg) {
 async function uploadMultipleFiles(files, commitMsg) {
     let successCount = 0;
     let failCount = 0;
+    let lastFilename = null;
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
-            await uploadFile(file, commitMsg);
+            const result = await uploadFile(file, commitMsg);
+            lastFilename = result.filename || sanitizeFilename(file.name);
+            invalidateImageCache(lastFilename);
             successCount++;
             showStatus(`Загружено ${successCount}/${files.length}`, false);
         } catch (err) {
@@ -177,7 +224,7 @@ async function uploadMultipleFiles(files, commitMsg) {
             showStatus(`Ошибка ${file.name}: ${err.message}`, true);
         }
     }
-    return { successCount, failCount };
+    return { successCount, failCount, lastFilename };
 }
 async function renameFile(oldName, newName) {
     const res = await fetch(`${API_BASE}/rename`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ old_name: oldName, new_name: newName }) });
@@ -191,16 +238,34 @@ async function loadImageBlob(filename) {
 }
 async function preloadImage(filename, forceReload = false) {
     if (!forceReload && imageCache.has(filename)) return imageCache.get(filename);
-    if (imageCache.has(filename)) {
-        const old = imageCache.get(filename);
-        if (old.url) URL.revokeObjectURL(old.url);
-        imageCache.delete(filename);
+    if (!forceReload && preloadPromises.has(filename)) return preloadPromises.get(filename);
+
+    const task = (async () => {
+        if (imageCache.has(filename)) {
+            const old = imageCache.get(filename);
+            if (old.url) URL.revokeObjectURL(old.url);
+            imageCache.delete(filename);
+        }
+        const blob = await loadImageBlob(filename);
+        const url = URL.createObjectURL(blob);
+        const data = { blob, url };
+        imageCache.set(filename, data);
+        return data;
+    })();
+
+    preloadPromises.set(filename, task);
+    try {
+        return await task;
+    } finally {
+        if (preloadPromises.get(filename) === task) preloadPromises.delete(filename);
     }
-    const blob = await loadImageBlob(filename);
-    const url = URL.createObjectURL(blob);
-    const data = { blob, url };
-    imageCache.set(filename, data);
-    return data;
+}
+function markImageLoadError(card, img, message = 'Ошибка загрузки') {
+    if (card) card.classList.remove('is-loading');
+    if (img) {
+        img.removeAttribute('src');
+        img.alt = message;
+    }
 }
 async function preloadNeighbors() {
     const indices = [currentIndex + 1, currentIndex + 2, currentIndex - 1, currentIndex - 2];
@@ -214,9 +279,8 @@ async function saveRotationForFile(file, rotationDeg) {
     if (rotationDeg % 360 === 0) return false;
     const cached = await preloadImage(file.name);
     const rotatedBlob = await new Promise((resolve, reject) => rotateImageBlob(cached.blob, rotationDeg, (err, blob) => err ? reject(err) : resolve(blob)));
-    const cleanBlob = await blobWithoutNullBytes(rotatedBlob);
     const safeName = sanitizeFilename(file.name);
-    await uploadFile(new File([cleanBlob], safeName, { type: 'image/jpeg' }), `Rotate ${safeName} by ${rotationDeg}°`);
+    await uploadFile(new File([rotatedBlob], safeName, { type: 'image/jpeg' }), `Rotate ${safeName} by ${rotationDeg}°`);
     if (imageCache.has(file.name)) {
         const old = imageCache.get(file.name);
         if (old.url) URL.revokeObjectURL(old.url);
@@ -272,6 +336,7 @@ function renderCurrentCardSync() {
                     <img class="card-image" src="${imgSrc}" alt="${imgAlt}" style="transform: rotate(${rot}deg);">
                 </div>
                 <div class="card-info">
+                    <span class="file-position">${escapeHtml(positionLabel)}</span>
                     <span class="file-name">${escapeHtml(file.name)}</span>
                 </div>
                 <div class="card-actions">
@@ -293,19 +358,33 @@ function renderCurrentCardSync() {
     cardStack.appendChild(card);
     currentCardElement = card;
 
-    if (!cached) {
-        preloadImage(file.name).then(cached => {
-            card.classList.remove('is-loading');
-            const img = card.querySelector('.card-image');
-            if (img && img.src !== cached.url) {
-                img.src = cached.url;
-                img.alt = file.name;
-            }
-        }).catch(() => {
-            card.classList.remove('is-loading');
-            const img = card.querySelector('.card-image');
-            if (img) img.alt = 'Ошибка';
-        });
+    const imgEl = card.querySelector('.card-image');
+    const finishLoading = () => {
+        if (card.isConnected) card.classList.remove('is-loading');
+    };
+    const loadTimeout = setTimeout(finishLoading, 12000);
+
+    const applyCachedImage = (cached) => {
+        if (!card.isConnected || card.dataset.filename !== file.name) return;
+        finishLoading();
+        if (imgEl && imgEl.src !== cached.url) {
+            imgEl.dataset.retried = '0';
+            imgEl.src = cached.url;
+            imgEl.alt = file.name;
+        }
+    };
+
+    if (cached) {
+        clearTimeout(loadTimeout);
+        if (imgEl && imgEl.src !== cached.url) {
+            imgEl.src = cached.url;
+            imgEl.alt = file.name;
+        }
+    } else {
+        preloadImage(file.name).then(applyCachedImage).catch(() => {
+            if (!card.isConnected) return;
+            markImageLoadError(card, imgEl);
+        }).finally(() => clearTimeout(loadTimeout));
     }
     updatePositionBadge();
     preloadNeighbors();
@@ -349,9 +428,11 @@ function attachCardEvents(card, file) {
         try {
             showLoading('Сохранение поворота...');
             saveRot.disabled = true;
+            const nextNext = (currentIndex + 1 < filesList.length) ? filesList[currentIndex + 1].name : null;
             await saveRotationForFile(file, currentRotation);
             showStatus('✅ Поворот сохранён');
-            await refreshInPlace(file.name);
+            await refreshAndNavigate(nextNext);
+            await updateSyncBadge();
         } catch (err) { showStatus(`❌ ${err.message}`, true); }
         finally {
             hideLoading();
@@ -360,6 +441,22 @@ function attachCardEvents(card, file) {
     });
     renameBtn.addEventListener('click', (e) => { e.stopPropagation(); startInlineRename(card, file); });
     fileNameSpan.addEventListener('click', (e) => { e.stopPropagation(); startInlineRename(card, file); });
+    if (img) {
+        img.addEventListener('error', () => {
+            if (img.dataset.retried === '1') {
+                markImageLoadError(card, img);
+                return;
+            }
+            img.dataset.retried = '1';
+            invalidateImageCache(file.name);
+            preloadImage(file.name, true).then(cached => {
+                if (card.dataset.filename !== file.name) return;
+                img.src = cached.url;
+                img.alt = file.name;
+            }).catch(() => markImageLoadError(card, img));
+        });
+    }
+    if (!img) return;
     img.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!wrapper) return;
@@ -392,46 +489,57 @@ function startInlineRename(card, file) {
     input.focus();
     input.select();
 
+    let committing = false;
     const commit = async () => {
+        if (committing) return;
         let newBase = input.value.trim();
         if (!newBase) { cleanup(); return; }
         let newName = ensureJpgExtension(newBase);
         if (newName === oldName) { cleanup(); return; }
+        committing = true;
         try {
             showLoading('Переименование...');
             const angle = rotationMap.get(oldName) || 0;
             if (angle % 360 !== 0) await saveRotationForFile(file, angle);
+            const nextFile = (currentIndex + 1 < filesList.length) ? filesList[currentIndex + 1].name : null;
             await renameFile(oldName, newName);
             showStatus(`✅ Переименован: ${oldName} → ${newName}`);
-            await refreshInPlace(newName);
+            await refreshAndNavigate(nextFile);
+            await updateSyncBadge();
         } catch (err) { showStatus(`❌ ${err.message}`, true); }
         finally {
             hideLoading();
             cleanup();
+            committing = false;
         }
     };
     const cleanup = () => { input.remove(); nameSpan.style.display = 'inline'; };
     input.addEventListener('blur', commit);
-    input.addEventListener('keypress', e => { if (e.key === 'Enter') commit(); });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        }
+    });
 }
 
-async function refreshInPlace(keepFileName) {
-    const prevName = keepFileName || (filesList[currentIndex] && filesList[currentIndex].name);
+async function refreshAndNavigate(nextFileName) {
     await loadFilesAndRefresh({ silent: true });
-    if (prevName) {
-        const idx = filesList.findIndex(f => f.name === prevName);
-        if (idx !== -1) currentIndex = idx;
+    if (nextFileName) {
+        const idx = filesList.findIndex(f => f.name === nextFileName);
+        if (idx !== -1 && idx !== currentIndex) {
+            currentIndex = idx;
+            renderCurrentCardSync();
+        }
     }
-    renderCurrentCardSync();
-    updatePositionBadge();
 }
 
 async function loadFilesAndRefresh(opts = {}) {
     try {
         const fetched = await fetchFiles();
-        filesList = fetched;
+        filesList = Array.isArray(fetched) ? fetched : [];
         if (filesList.length === 0) currentIndex = 0;
-        else if (currentIndex >= filesList.length) currentIndex = filesList.length - 1;
+        else if (currentIndex >= filesList.length) currentIndex = 0;
         for (let fn of imageCache.keys()) {
             if (!filesList.some(f => f.name === fn)) {
                 const old = imageCache.get(fn);
@@ -442,7 +550,8 @@ async function loadFilesAndRefresh(opts = {}) {
         }
         renderCurrentCardSync();
         updatePositionBadge();
-        if (!opts.silent) showStatus(`В списке ${filesList.length} файлов`);
+        await updateSyncBadge();
+        if (!opts.silent) showStatus(`Загружено ${filesList.length} файлов`);
     } catch (err) {
         showStatus(`Ошибка загрузки: ${err.message}`, true);
         filesList = [];
@@ -469,27 +578,36 @@ function triggerCameraUpload() {
     input.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        if (isCameraUploading) return;
+        isCameraUploading = true;
 
         uploadCameraBtn.disabled = true;
-        nextPhotoBtn.hidden = true;
+        uploadCameraBtn.textContent = '⏳ Сжатие...';
         showLoading('Сжатие и отправка...');
         showStatus('Сжатие фото...');
 
         try {
             const compressed = await compressToMaxSize(file, 300);
-            setLoadingText('Отправка на сервер...');
-            showStatus('Отправка на сервер...');
-            await uploadFile(compressed, '');
-            showStatus('✅ Фото загружено — можно снять следующее');
+            setLoadingText('Сохранение на сервер...');
+            showStatus('Сохранение на сервер...');
+            const result = await uploadFile(compressed, '');
+            invalidateImageCache(result.filename);
+            showStatus('✅ Фото успешно загружено!');
             await loadFilesAndRefresh({ silent: true });
-            if (filesList.length) currentIndex = filesList.length - 1;
-            updatePositionBadge();
-            nextPhotoBtn.hidden = false;
+            if (result.filename) showFileByName(result.filename);
+            else if (filesList.length) {
+                currentIndex = filesList.length - 1;
+                renderCurrentCardSync();
+            }
+            if (filesList.length) switchToViewTab();
+            await updateSyncBadge();
         } catch (err) {
             showStatus(`❌ Ошибка загрузки: ${err.message}`, true);
         } finally {
-            hideLoading();
+            resetLoading();
+            isCameraUploading = false;
             uploadCameraBtn.disabled = false;
+            uploadCameraBtn.textContent = '📸 Сфотографировать и загрузить';
             input.remove();
         }
     });
@@ -498,28 +616,54 @@ function triggerCameraUpload() {
 }
 // Назначаем обработчик на кнопку
 uploadCameraBtn.addEventListener('click', triggerCameraUpload);
-nextPhotoBtn.addEventListener('click', triggerCameraUpload);
 refreshBtn.addEventListener('click', () => withLoading(loadFilesAndRefresh(), 'Обновление списка...'));
+syncBtn.addEventListener('click', async () => {
+    try {
+        syncBtn.disabled = true;
+        showLoading('Синхронизация с Git...');
+        const result = await syncToGit();
+        const parts = [];
+        if (result.uploaded) parts.push(`+${result.uploaded}`);
+        if (result.updated) parts.push(`~${result.updated}`);
+        if (result.deleted) parts.push(`-${result.deleted}`);
+        const summary = parts.length ? parts.join(' ') : 'изменений нет';
+        if (result.errors && result.errors.length) {
+            showStatus(`⚠️ Git: ${summary}, ошибок: ${result.errors.length}`, true);
+        } else {
+            showStatus(`☁️ Синхронизировано: ${summary}`);
+        }
+        await updateSyncBadge();
+    } catch (err) {
+        showStatus(`❌ Синхронизация: ${err.message}`, true);
+    } finally {
+        hideLoading();
+        syncBtn.disabled = false;
+    }
+});
 
 // ==================== МНОЖЕСТВЕННАЯ ЗАГРУЗКА (как раньше) ====================
 uploadBtn.addEventListener('click', async () => {
     const files = Array.from(fileInput.files);
     if (!files.length) { showStatus('Выберите файлы', true); return; }
+    if (isBatchUploading) return;
+    isBatchUploading = true;
     try {
         showLoading('Загрузка файлов...');
-        const { successCount, failCount } = await uploadMultipleFiles(files, '');
-        showStatus(`✅ Загружено ${successCount} из ${files.length}${failCount ? `, ошибок: ${failCount}` : ''}`);
+        const { successCount, failCount, lastFilename } = await uploadMultipleFiles(files, '');
+        showStatus(`✅ Загружено ${successCount} из ${files.length} файлов${failCount ? `, ошибок: ${failCount}` : ''}`);
         fileInput.value = '';
         await loadFilesAndRefresh({ silent: true });
-        if (filesList.length) {
-            currentIndex = filesList.length - successCount;
-            if (currentIndex < 0) currentIndex = 0;
+        if (lastFilename) showFileByName(lastFilename);
+        else if (filesList.length) {
+            currentIndex = filesList.length - 1;
             renderCurrentCardSync();
         }
+        await updateSyncBadge();
     } catch (err) {
         showStatus(`❌ Ошибка: ${err.message}`, true);
     } finally {
-        hideLoading();
+        resetLoading();
+        isBatchUploading = false;
     }
 });
 
@@ -570,8 +714,7 @@ async function compressToMaxSize(file, maxSizeKB = 300) {
 
   URL.revokeObjectURL(img.src);
   const name = sanitizeFilename(file.name.replace(/\.(png|gif|bmp|webp)$/i, '.jpg'));
-  const cleanBlob = await blobWithoutNullBytes(blob);
-  return new File([cleanBlob], name, { type: 'image/jpeg' });
+  return new File([blob], name, { type: 'image/jpeg' });
 }
 // Тема
 function getSystemTheme() { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
