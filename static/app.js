@@ -94,6 +94,7 @@ const rotationMap = new Map();
 const preloadPromises = new Map();
 let isCameraUploading = false;
 let isBatchUploading = false;
+let isGitSyncing = false;
 
 // ==================== УТИЛИТЫ ====================
 function setLoadingText(text) {
@@ -148,19 +149,32 @@ function switchToViewTab() {
     const viewTab = document.querySelector('.tab-btn[data-tab="view"]');
     if (viewTab) viewTab.click();
 }
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+        if (err.name === 'AbortError') throw new Error('Превышено время ожидания');
+        throw err;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 async function fetchSyncStatus() {
-    const res = await fetch(`${API_BASE}/sync/status`);
+    const res = await fetchWithTimeout(`${API_BASE}/sync/status`, {}, 8000);
     if (!res.ok) return { pending: 0, has_token: false };
     const data = await res.json();
     return data && typeof data === 'object' ? data : { pending: 0, has_token: false };
 }
 async function syncToGit() {
-    const res = await fetch(`${API_BASE}/sync`, { method: 'POST' });
+    const res = await fetchWithTimeout(`${API_BASE}/sync`, { method: 'POST' }, 480000);
+    if (res.status === 409) throw new Error('Синхронизация уже выполняется');
     if (!res.ok) throw new Error(await res.text());
     return res.json();
 }
 async function updateSyncBadge() {
-    if (!syncBadge) return;
+    if (!syncBadge || isGitSyncing) return;
     try {
         const { pending } = await fetchSyncStatus();
         if (pending > 0) {
@@ -618,9 +632,12 @@ function triggerCameraUpload() {
 uploadCameraBtn.addEventListener('click', triggerCameraUpload);
 refreshBtn.addEventListener('click', () => withLoading(loadFilesAndRefresh(), 'Обновление списка...'));
 syncBtn.addEventListener('click', async () => {
+    if (isGitSyncing) return;
+    isGitSyncing = true;
     try {
         syncBtn.disabled = true;
         showLoading('Синхронизация с Git...');
+        setLoadingText('Отправка на GitHub...');
         const result = await syncToGit();
         const parts = [];
         if (result.uploaded) parts.push(`+${result.uploaded}`);
@@ -628,16 +645,18 @@ syncBtn.addEventListener('click', async () => {
         if (result.deleted) parts.push(`-${result.deleted}`);
         const summary = parts.length ? parts.join(' ') : 'изменений нет';
         if (result.errors && result.errors.length) {
-            showStatus(`⚠️ Git: ${summary}, ошибок: ${result.errors.length}`, true);
+            const firstErr = result.errors[0];
+            showStatus(`⚠️ Git: ${summary}, ошибок: ${result.errors.length}. ${firstErr}`, true);
         } else {
             showStatus(`☁️ Синхронизировано: ${summary}`);
         }
-        await updateSyncBadge();
     } catch (err) {
         showStatus(`❌ Синхронизация: ${err.message}`, true);
     } finally {
-        hideLoading();
+        isGitSyncing = false;
+        resetLoading();
         syncBtn.disabled = false;
+        updateSyncBadge();
     }
 });
 
