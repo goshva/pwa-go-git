@@ -77,7 +77,6 @@ var (
 	targetDir   = "photos"
 	localDir    = "./photos"
 	stateFile   = "./photos/.sync_state.json"
-	apiBaseURL  = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/contents/" + targetDir
 
 	stateMu        sync.Mutex
 	syncState      SyncState
@@ -352,27 +351,23 @@ func syncStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func fetchRemoteFiles(ctx context.Context) (map[string]string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", apiBaseURL, nil)
+	body, err := githubRequest(ctx, "GET", "/contents/"+encodeRepoPath(targetDir), nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "Not Found") {
+			log.Println("☁️ Папка photos/ на GitHub ещё не создана — считаем пустой")
+			return make(map[string]string), nil
+		}
 		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+githubToken)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-
-	resp, err := githubClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp GitHubError
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf(errResp.Message)
 	}
 
 	var contents []GitHubContent
-	json.NewDecoder(resp.Body).Decode(&contents)
+	if err := json.Unmarshal(body, &contents); err != nil {
+		var single GitHubContent
+		if err2 := json.Unmarshal(body, &single); err2 != nil || single.Type != "file" {
+			return nil, fmt.Errorf("неожиданный ответ GitHub")
+		}
+		return map[string]string{single.Name: single.Sha}, nil
+	}
 
 	remote := make(map[string]string)
 	for _, c := range contents {
@@ -666,16 +661,10 @@ func markFileDeletedFromRemote(name string) {
 	delete(syncState.GitSHAs, name)
 }
 
-func collectPendingDeletes(remote map[string]string, localNames map[string]bool) []string {
+func collectPendingDeletes() []string {
 	stateMu.Lock()
 	defer stateMu.Unlock()
-	deletes := append([]string{}, syncState.PendingDeletes...)
-	for name := range remote {
-		if !localNames[name] {
-			deletes = append(deletes, name)
-		}
-	}
-	return uniqueStrings(deletes)
+	return uniqueStrings(append([]string{}, syncState.PendingDeletes...))
 }
 
 func syncToGit(w http.ResponseWriter, r *http.Request) {
@@ -708,12 +697,7 @@ func syncToGit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	localNames := make(map[string]bool)
-	for _, f := range localEntries {
-		localNames[f["name"].(string)] = true
-	}
-
-	deletes := collectPendingDeletes(remote, localNames)
+	deletes := collectPendingDeletes()
 	for _, name := range deletes {
 		if err := ctx.Err(); err != nil {
 			result.Errors = append(result.Errors, "timeout: "+err.Error())
